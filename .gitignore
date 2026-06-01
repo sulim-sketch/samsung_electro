@@ -1,0 +1,29 @@
+# API 키
+.env
+
+# 수집 raw 데이터 (용량 큼)
+data/raw/
+
+# 생성물 (blog_counts.csv 제외)
+data/processed/daily_summary.csv
+data/processed/dashboard.html
+data/processed/dashboard.png
+data/processed/samsung_electric_price.png
+data/processed/samsung_electric_filtered.xlsx
+data/processed/ai_classified_summary.csv
+
+# 로그
+logs/
+
+# Python 캐시
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 가상환경
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
