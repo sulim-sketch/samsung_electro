@@ -87,68 +87,102 @@ col4.metric("일 평균 언급", f"{blog.mean():.1f}건")
 
 st.divider()
 
-# ── 차트 ─────────────────────────────────────────────────────────
+# ── 차트 모드 선택 ────────────────────────────────────────────────
 
-fig = make_subplots(
-    rows=2, cols=1,
-    shared_xaxes=True,
-    vertical_spacing=0.08,
-    row_heights=[0.65, 0.35],
-    subplot_titles=("수정주가 (원)", "일별 네이버 블로그 추천 언급 수 (건)"),
+from datetime import timedelta
+
+chart_mode = st.radio(
+    "차트 모드",
+    ["분리 (상단: 주가 / 하단: 언급 수)", "통합 (이중 Y축)"],
+    horizontal=True,
 )
 
-# 상단: 주가
-fig.add_trace(
-    go.Scatter(
+period_days = (sel_end - sel_start).days
+x_end = sel_end + timedelta(days=int(period_days * 0.1))
+COMMON_XAXIS = dict(
+    showgrid=True, gridcolor="#e5e5e5",
+    tickformat="%Y-%m", dtick="M1", fixedrange=True,
+    range=[str(sel_start), str(x_end)],
+)
+
+# ── 분리 모드 ─────────────────────────────────────────────────────
+if chart_mode.startswith("분리"):
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
+        row_heights=[0.65, 0.35],
+        subplot_titles=("수정주가 (원)", "일별 네이버 블로그 추천 언급 수 (건)"),
+    )
+    fig.add_trace(go.Scatter(
         x=price.index, y=price.values,
         mode="lines", name="수정종가",
         line=dict(color="#1f77b4", width=1.5),
         fill="tozeroy", fillcolor="rgba(31,119,180,0.07)",
         hovertemplate="%{x|%Y-%m-%d}<br>종가: %{y:,.0f}원<extra></extra>",
-    ),
-    row=1, col=1,
-)
-
-# 하단: 블로그 카운트
-fig.add_trace(
-    go.Bar(
+    ), row=1, col=1)
+    fig.add_trace(go.Bar(
         x=blog.index, y=blog.values,
         name="네이버 블로그 추천 언급", marker_color="#5b9bd5",
         hovertemplate="%{x|%Y-%m-%d}<br>언급 수: %{y}건<extra></extra>",
-    ),
-    row=2, col=1,
-)
-
-# 평균선
-if blog.mean() > 0:
-    fig.add_hline(
-        y=blog.mean(), row=2, col=1,
-        line=dict(color="gray", dash="dash", width=1),
-        annotation_text=f"평균 {blog.mean():.1f}건",
-        annotation_position="top left",
-        annotation_font_size=11,
+    ), row=2, col=1)
+    if blog.mean() > 0:
+        fig.add_hline(
+            y=blog.mean(), row=2, col=1,
+            line=dict(color="gray", dash="dash", width=1),
+            annotation_text=f"평균 {blog.mean():.1f}건",
+            annotation_position="top left", annotation_font_size=11,
+        )
+    fig.update_layout(
+        height=650, showlegend=True,
+        legend=dict(orientation="h", y=1.02, x=0),
+        hovermode="x unified", dragmode=False,
+        plot_bgcolor="white", paper_bgcolor="white",
+        font=dict(size=12), margin=dict(t=60, b=40, l=70, r=30),
     )
+    fig.update_xaxes(**COMMON_XAXIS)
+    fig.update_yaxes(showgrid=True, gridcolor="#e5e5e5",
+                     tickformat=",", autorange=True, fixedrange=True, row=1, col=1)
+    fig.update_yaxes(showgrid=True, gridcolor="#e5e5e5",
+                     autorange=True, rangemode="tozero", fixedrange=True, row=2, col=1)
 
-fig.update_layout(
-    height=650,
-    showlegend=True,
-    legend=dict(orientation="h", y=1.02, x=0),
-    hovermode="x unified",
-    dragmode=False,
-    plot_bgcolor="white",
-    paper_bgcolor="white",
-    font=dict(size=12),
-    margin=dict(t=60, b=40, l=70, r=30),
-)
-from datetime import timedelta
-period_days = (sel_end - sel_start).days
-x_end = sel_end + timedelta(days=int(period_days * 0.1))
-fig.update_xaxes(showgrid=True, gridcolor="#e5e5e5",
-                 tickformat="%Y-%m", dtick="M1", fixedrange=True,
-                 range=[str(sel_start), str(x_end)])
-fig.update_yaxes(showgrid=True, gridcolor="#e5e5e5",
-                 tickformat=",", autorange=True, fixedrange=True, row=1, col=1)
-fig.update_yaxes(showgrid=True, gridcolor="#e5e5e5",
-                 autorange=True, rangemode="tozero", fixedrange=True, row=2, col=1)
+# ── 통합 모드 (이중 Y축) ─────────────────────────────────────────
+else:
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(go.Bar(
+        x=blog.index, y=blog.values,
+        name="블로그 추천 언급", marker_color="#5b9bd5", opacity=0.6,
+        hovertemplate="%{x|%Y-%m-%d}<br>언급 수: %{y}건<extra></extra>",
+    ), secondary_y=False)
+    fig.add_trace(go.Scatter(
+        x=price.index, y=price.values,
+        mode="lines", name="수정종가",
+        line=dict(color="#d62728", width=1.8),
+        hovertemplate="%{x|%Y-%m-%d}<br>종가: %{y:,.0f}원<extra></extra>",
+    ), secondary_y=True)
+    if blog.mean() > 0:
+        fig.add_hline(
+            y=blog.mean(), secondary_y=False,
+            line=dict(color="gray", dash="dash", width=1),
+            annotation_text=f"평균 {blog.mean():.1f}건",
+            annotation_position="top left", annotation_font_size=11,
+        )
+    fig.update_layout(
+        height=550, showlegend=True,
+        legend=dict(orientation="h", y=1.02, x=0),
+        hovermode="x unified", dragmode=False,
+        plot_bgcolor="white", paper_bgcolor="white",
+        font=dict(size=12), margin=dict(t=60, b=40, l=70, r=80),
+        title=dict(text="수정주가 & 네이버 블로그 추천 언급 수", font=dict(size=14)),
+    )
+    fig.update_xaxes(**COMMON_XAXIS)
+    fig.update_yaxes(
+        title_text="블로그 언급 수 (건)", showgrid=True, gridcolor="#e5e5e5",
+        rangemode="tozero", autorange=True, fixedrange=True, secondary_y=False,
+    )
+    fig.update_yaxes(
+        title_text="수정주가 (원)", tickformat=",", showgrid=False,
+        autorange=True, fixedrange=True, secondary_y=True,
+    )
 
 st.plotly_chart(fig, use_container_width=True)
