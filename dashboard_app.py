@@ -93,7 +93,7 @@ from datetime import timedelta
 
 chart_mode = st.radio(
     "차트 모드",
-    ["분리 (상단: 주가 / 하단: 언급 수)", "통합 (이중 Y축)"],
+    ["통합 (이중 Y축)", "분리 (상단: 주가 / 하단: 언급 수)"],
     horizontal=True,
 )
 
@@ -106,7 +106,7 @@ COMMON_XAXIS = dict(
 )
 
 # ── 분리 모드 ─────────────────────────────────────────────────────
-if chart_mode.startswith("분리"):
+if chart_mode.startswith("분리"):  # 분리 모드
     fig = make_subplots(
         rows=2, cols=1,
         shared_xaxes=True,
