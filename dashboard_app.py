@@ -56,6 +56,13 @@ with st.sidebar:
     )
     st.caption(f"{sel_start} ~ {sel_end}")
     st.divider()
+    st.header("📡 데이터 소스")
+    sources = st.multiselect(
+        "소스 선택",
+        options=["네이버 블로그"],
+        default=["네이버 블로그"],
+    )
+    st.divider()
     st.caption("삼성전기 (009150)\n주가 & 블로그 추천 언급 빈도")
 
 # ── 데이터 로드 & 필터링 ─────────────────────────────────────────
@@ -67,8 +74,13 @@ with st.spinner("데이터 로딩 중..."):
 s = pd.Timestamp(sel_start)
 e = pd.Timestamp(sel_end)
 
-blog  = blog_all[s:e]
-price = price_all[s:e]
+price    = price_all[s:e]
+blog_raw = blog_all[s:e]
+
+# 선택된 데이터 소스의 카운트 합산 (추후 소스 추가 시 여기에 병합)
+blog = blog_raw if "네이버 블로그" in sources else pd.Series(
+    0, index=blog_raw.index, dtype=int
+)
 
 # ── 헤더 ─────────────────────────────────────────────────────────
 
