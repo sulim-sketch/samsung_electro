@@ -82,7 +82,7 @@ with st.sidebar:
         default=["네이버 블로그"],
     )
     st.divider()
-    st.caption("삼성전기 (009150)\n주가 & 블로그 추천 언급 빈도")
+    st.caption(f"{sel_name}\n주가 & 블로그 추천 언급 빈도")
 
 # ── 데이터 로드 & 필터링 ─────────────────────────────────────────
 
@@ -105,7 +105,7 @@ blog = blog_raw if "네이버 블로그" in sources else pd.Series(
 
 # ── 헤더 ─────────────────────────────────────────────────────────
 
-st.title("📈 삼성전기 (009150) 대시보드")
+st.title(f"📈 {sel_name} ({yahoo_ticker}) 대시보드")
 st.caption(f"수정주가 & 네이버 블로그 추천 언급 빈도 | {sel_start} ~ {sel_end}")
 
 # 요약 지표

@@ -1,4 +1,4 @@
-# generate_html_dashboard.py — 독립 실행형 HTML 대시보드 생성
+# generate_html_dashboard.py — 독립 실행형 HTML 대시보드 생성 (다중 종목 지원)
 import json
 import sys
 from pathlib import Path
@@ -10,27 +10,51 @@ sys.path.insert(0, str(Path(__file__).parent))
 import config
 
 START, END = "2024-06-01", "2026-05-31"
-# blog_counts.csv는 config.EXCLUDE_KEYWORDS 기준으로 사전 생성된 파일을 사용
+full_idx   = pd.date_range(START, END, freq="D")
+dates_list = full_idx.strftime("%Y-%m-%d").tolist()
 
-# ── 데이터 준비 ───────────────────────────────────────────────────
-blog_df = pd.read_csv(config.PROCESSED_DIR / "blog_counts.csv", parse_dates=["date"])
-full_idx = pd.date_range(START, END, freq="D")
+# ── 종목별 데이터 수집 ────────────────────────────────────────────
+meta        = config.load_stocks_meta()
+all_stocks  = {}  # {종목명: {counts, prices}}
 
-df_stock = yf.download("009150.KS", start=START, end="2026-06-01",
-                        auto_adjust=True, progress=False)
-price = df_stock["Close"].squeeze().dropna()
-price.index = price.index.tz_localize(None)
-price = price.reindex(full_idx).ffill().round(2)
+for csv_path in sorted(config.PROCESSED_DIR.glob("blog_counts_*.csv")):
+    name = csv_path.stem.replace("blog_counts_", "")
+    df_c = pd.read_csv(csv_path, parse_dates=["date"])
+    counts = (
+        df_c.set_index("date")["count"]
+        .reindex(pd.to_datetime(dates_list))
+        .fillna(0).astype(int).tolist()
+    )
 
-dates  = full_idx.strftime("%Y-%m-%d").tolist()
-prices = [None if pd.isna(v) else float(v) for v in price.values]
-counts = (
-    blog_df.set_index("date")["count"]
-    .reindex(pd.to_datetime(dates))
-    .fillna(0).astype(int).tolist()
+    # 주가 (stocks_meta.json에서 yahoo ticker 조회)
+    yahoo_ticker = meta.get(name, {}).get("yahoo_ticker")
+    if yahoo_ticker:
+        df_s  = yf.download(yahoo_ticker, start=START, end="2026-06-01",
+                             auto_adjust=True, progress=False)
+        price = df_s["Close"].squeeze().dropna()
+        price.index = price.index.tz_localize(None)
+        price = price.reindex(full_idx).ffill().round(2)
+        prices = [None if pd.isna(v) else float(v) for v in price.values]
+    else:
+        prices = [None] * len(dates_list)
+
+    all_stocks[name] = {"counts": counts, "prices": prices}
+    print(f"  [{name}] 카운트 합계: {sum(counts):,}건 | 주가: {'있음' if yahoo_ticker else '없음'}")
+
+if not all_stocks:
+    raise FileNotFoundError("blog_counts_*.csv 파일이 없습니다.")
+
+default_stock = list(all_stocks.keys())[0]
+data_json     = json.dumps(
+    {"dates": dates_list, "stocks": all_stocks, "default": default_stock},
+    ensure_ascii=False
 )
-data_json = json.dumps({"dates": dates, "prices": prices, "counts": counts},
-                        ensure_ascii=False)
+
+# ── 종목 선택 옵션 HTML ───────────────────────────────────────────
+stock_options = "\n".join(
+    f'      <option value="{n}"{" selected" if i==0 else ""}>{n}</option>'
+    for i, n in enumerate(all_stocks.keys())
+)
 
 # ── HTML 생성 ─────────────────────────────────────────────────────
 html = f"""<!DOCTYPE html>
@@ -38,7 +62,7 @@ html = f"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>삼성전기 대시보드</title>
+<title>종목 대시보드</title>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <style>
   *{{box-sizing:border-box;margin:0;padding:0}}
@@ -50,6 +74,9 @@ html = f"""<!DOCTYPE html>
              border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:18px;flex-wrap:wrap}}
   .ctrl{{display:flex;align-items:center;gap:8px}}
   .ctrl label{{font-size:13px;color:#555;white-space:nowrap}}
+  select{{border:1px solid #ddd;border-radius:6px;padding:6px 10px;font-size:13px;
+          outline:none;cursor:pointer;background:#fff}}
+  select:focus{{border-color:#1f77b4}}
   input[type=date]{{border:1px solid #ddd;border-radius:6px;padding:6px 10px;font-size:13px;outline:none;cursor:pointer}}
   input[type=date]:focus{{border-color:#1f77b4}}
   .sep{{width:1px;height:30px;background:#e0e0e0}}
@@ -59,9 +86,9 @@ html = f"""<!DOCTYPE html>
   .radios input[type=radio]{{display:none}}
   .radios label.active{{background:#e8f0fb;border-color:#1f77b4;color:#1f77b4;font-weight:600}}
   .sources{{display:flex;gap:6px;align-items:center}}
-  .sources .src-label{{display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 14px;
-                        border-radius:6px;font-size:13px;border:1px solid #ddd;background:#fafafa;transition:all .15s}}
-  .sources .src-label.active{{background:#e8f0fb;border-color:#1f77b4;color:#1f77b4;font-weight:600}}
+  .src-label{{display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 14px;
+              border-radius:6px;font-size:13px;border:1px solid #ddd;background:#fafafa;transition:all .15s}}
+  .src-label.active{{background:#e8f0fb;border-color:#1f77b4;color:#1f77b4;font-weight:600}}
   .src-title{{font-size:13px;color:#555;white-space:nowrap}}
   .metrics{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}}
   .card{{background:#fff;border-radius:10px;padding:16px 20px;box-shadow:0 1px 4px rgba(0,0,0,.08)}}
@@ -74,10 +101,17 @@ html = f"""<!DOCTYPE html>
 </head>
 <body>
 <div class="wrap">
-  <h1>📈 삼성전기 (009150) 대시보드</h1>
+  <h1 id="title">📈 대시보드</h1>
   <p class="caption" id="cap">수정주가 &amp; 네이버 블로그 추천 언급 빈도</p>
 
   <div class="controls">
+    <div class="ctrl">
+      <label>종목</label>
+      <select id="stockSel">
+{stock_options}
+      </select>
+    </div>
+    <div class="sep"></div>
     <div class="ctrl"><label>시작일</label>
       <input type="date" id="ds" value="2024-06-01" min="2024-06-01" max="2026-05-31"></div>
     <div class="ctrl"><label>종료일</label>
@@ -113,11 +147,25 @@ html = f"""<!DOCTYPE html>
 var D = {data_json};
 var CFG = {{displayModeBar:false,responsive:true}};
 
+function getStock(){{ return document.getElementById('stockSel').value; }}
+
 function slice(start,end){{
   var si=D.dates.indexOf(start), ei=D.dates.indexOf(end);
   if(si<0)si=0; if(ei<0)ei=D.dates.length-1;
-  return{{dates:D.dates.slice(si,ei+1),prices:D.prices.slice(si,ei+1),counts:D.counts.slice(si,ei+1)}};
+  var s=D.stocks[getStock()];
+  return{{
+    dates:  D.dates.slice(si,ei+1),
+    prices: s.prices.slice(si,ei+1),
+    counts: s.counts.slice(si,ei+1)
+  }};
 }}
+
+function getActiveCounts(d){{
+  var active=document.querySelectorAll('input[name=src]:checked');
+  if(!active.length) return new Array(d.dates.length).fill(0);
+  return d.counts;  // 현재 소스: 네이버 블로그만
+}}
+
 function fv(a){{for(var i=0;i<a.length;i++)if(a[i]!=null)return a[i];return null;}}
 function lv(a){{for(var i=a.length-1;i>=0;i--)if(a[i]!=null)return a[i];return null;}}
 function pad(start,end){{
@@ -125,6 +173,11 @@ function pad(start,end){{
   var x=new Date(e);x.setDate(x.getDate()+p);return x.toISOString().slice(0,10);
 }}
 function ko(n){{return n==null?'N/A':Math.round(n).toLocaleString('ko-KR')+'원';}}
+
+function updateHeader(){{
+  var name=getStock();
+  document.getElementById('title').textContent='📈 '+name+' 대시보드';
+}}
 
 function updateMetrics(d){{
   var sp=fv(d.prices),ep=lv(d.prices);
@@ -145,6 +198,7 @@ function draw(d,mode,start,end){{
   var xe=pad(start,end);
   var xax={{showgrid:true,gridcolor:'#e5e5e5',fixedrange:true,tickformat:'%Y-%m',dtick:'M1',range:[start,xe]}};
   var avg=d.counts.reduce(function(a,b){{return a+b;}},0)/d.dates.length;
+  var name=getStock();
 
   if(mode==='integrated'){{
     var traces=[
@@ -188,7 +242,7 @@ function draw(d,mode,start,end){{
       plot_bgcolor:'white',paper_bgcolor:'white',
       legend:{{orientation:'h',y:1.04,x:0}},
       margin:{{t:30,b:60,l:70,r:30}},font:{{size:12}},
-      xaxis:x1ax, xaxis2:x2ax,
+      xaxis:x1ax,xaxis2:x2ax,
       yaxis:{{showgrid:true,gridcolor:'#e5e5e5',fixedrange:true,
               anchor:'x',domain:[0,0.32],rangemode:'tozero',autorange:true,title:'언급 수 (건)'}},
       yaxis2:{{showgrid:true,gridcolor:'#e5e5e5',fixedrange:true,
@@ -201,30 +255,15 @@ function draw(d,mode,start,end){{
   }}
 }}
 
-// 데이터 소스별 카운트 맵 (추후 소스 추가 시 여기에 등록)
-var SOURCE_COUNTS = {{
-  'naver_blog': D.counts
-}};
-
-function getActiveCounts(dates){{
-  var active=document.querySelectorAll('input[name=src]:checked');
-  var total=new Array(dates.length).fill(0);
-  active.forEach(function(cb){{
-    var src=SOURCE_COUNTS[cb.value];
-    if(!src)return;
-    for(var i=0;i<total.length;i++) total[i]+=src[i]||0;
-  }});
-  return total;
-}}
-
 function update(){{
   var start=document.getElementById('ds').value;
   var end=document.getElementById('de').value;
   if(start>end)return;
   var mode=document.querySelector('input[name=mode]:checked').value;
   var d=slice(start,end);
-  d.counts=getActiveCounts(d.dates);  // 선택된 소스 합산
+  d.counts=getActiveCounts(d);
   document.getElementById('cap').textContent='수정주가 & 네이버 블로그 추천 언급 빈도 | '+start+' ~ '+end;
+  updateHeader();
   updateMetrics(d);
   draw(d,mode,start,end);
   document.querySelectorAll('.radios label').forEach(function(l){{
@@ -235,6 +274,7 @@ function update(){{
   }});
 }}
 
+document.getElementById('stockSel').addEventListener('change',update);
 document.getElementById('ds').addEventListener('change',update);
 document.getElementById('de').addEventListener('change',update);
 document.querySelectorAll('input[name=mode]').forEach(function(r){{r.addEventListener('change',update);}});
@@ -246,4 +286,5 @@ update();
 
 out = config.PROCESSED_DIR / "dashboard.html"
 out.write_text(html, encoding="utf-8")
-print(f"저장 완료: {out}")
+print(f"\n저장 완료: {out}")
+print(f"포함 종목: {list(all_stocks.keys())}")
