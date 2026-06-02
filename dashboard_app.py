@@ -15,8 +15,16 @@ ROOT            = Path(__file__).parent
 DATE_START = date(2024, 6, 1)
 DATE_END   = date(2026, 5, 31)
 
-def blog_counts_csv(ticker: str) -> Path:
-    return ROOT / "data" / "processed" / f"blog_counts_{ticker}.csv"
+def blog_counts_csv(name: str) -> Path:
+    return ROOT / "data" / "processed" / f"blog_counts_{name}.csv"
+
+def available_stocks() -> list[str]:
+    """blog_counts_*.csv 파일에서 수집된 종목명 목록 반환"""
+    proc = ROOT / "data" / "processed"
+    return sorted(
+        p.stem.replace("blog_counts_", "")
+        for p in proc.glob("blog_counts_*.csv")
+    )
 
 st.set_page_config(
     page_title="삼성전기 대시보드",
@@ -27,8 +35,8 @@ st.set_page_config(
 # ── 데이터 로드 (캐시) ────────────────────────────────────────────
 
 @st.cache_data
-def load_blog_counts(ticker: str) -> pd.Series:
-    csv = blog_counts_csv(ticker)
+def load_blog_counts(name: str) -> pd.Series:
+    csv = blog_counts_csv(name)
     if not csv.exists():
         return pd.Series(0, index=pd.date_range(str(DATE_START), str(DATE_END), freq="D"), dtype=int)
     df       = pd.read_csv(csv, parse_dates=["date"])
@@ -38,8 +46,8 @@ def load_blog_counts(ticker: str) -> pd.Series:
 
 
 @st.cache_data
-def load_price() -> pd.Series:
-    df    = yf.download("009150.KS", start=str(DATE_START), end="2026-06-01",
+def load_price(yahoo_ticker: str) -> pd.Series:
+    df    = yf.download(yahoo_ticker, start=str(DATE_START), end="2026-06-01",
                          auto_adjust=True, progress=False)
     price = df["Close"].squeeze().dropna()
     price.index = price.index.tz_localize(None)
@@ -51,10 +59,11 @@ def load_price() -> pd.Series:
 
 with st.sidebar:
     st.header("📊 종목 선택")
-    # config.STOCKS에 등록된 종목만 표시
-    STOCK_OPTIONS = {f"[{t}] {info['name']}": t for t, info in {"009150": {"name": "삼성전기"}}.items()}
-    sel_stock_label = st.selectbox("종목", options=list(STOCK_OPTIONS.keys()))
-    sel_ticker = STOCK_OPTIONS[sel_stock_label]
+    stocks = available_stocks()
+    if not stocks:
+        st.warning("수집된 종목 없음")
+        st.stop()
+    sel_name = st.selectbox("종목", options=stocks)
     st.divider()
     st.header("📅 기간 설정")
     sel_start, sel_end = st.slider(
@@ -78,8 +87,10 @@ with st.sidebar:
 # ── 데이터 로드 & 필터링 ─────────────────────────────────────────
 
 with st.spinner("데이터 로딩 중..."):
-    blog_all  = load_blog_counts(sel_ticker)
-    price_all = load_price()
+    blog_all  = load_blog_counts(sel_name)
+    meta      = config.load_stocks_meta()
+    yahoo_ticker = meta.get(sel_name, {}).get("yahoo_ticker", f"{sel_name}.KS")
+    price_all = load_price(yahoo_ticker)
 
 s = pd.Timestamp(sel_start)
 e = pd.Timestamp(sel_end)

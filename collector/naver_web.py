@@ -160,21 +160,22 @@ def _parse_results(html: str) -> list[dict]:
 
 def collect_blog_for_date(
     target_date: date,
-    ticker: str = config.DEFAULT_TICKER,
+    name: str = config.DEFAULT_NAME,
     force: bool = False,
 ) -> list[dict]:
     """
     Selenium으로 날짜 필터가 적용된 네이버 웹 검색 결과 수집.
-    - ticker별 하위 디렉토리에 저장: data/raw/blog/{ticker}/{YYYYMMDD}.json
+    - 종목명을 디렉토리로 사용: data/raw/blog/{name}/{YYYYMMDD}.json
+    - 키워드는 종목명으로 자동 생성
     """
     date_str     = target_date.strftime("%Y%m%d")
-    out_path     = config.RAW_DIR / "blog" / ticker / f"{date_str}.json"
-    keywords     = config.get_keywords(ticker)
-    title_filter = config.get_title_keyword(ticker)
+    out_path     = config.RAW_DIR / "blog" / name / f"{date_str}.json"
+    keywords     = config.generate_keywords(name)
+    title_filter = name
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     if out_path.exists() and not force:
-        logger.info(f"[WEB] {ticker}/{date_str} 이미 수집됨 — skip")
+        logger.info(f"[WEB] {name}/{date_str} 이미 수집됨 — skip")
         with open(out_path, encoding="utf-8") as f:
             return json.load(f).get("items", [])
 
@@ -219,7 +220,7 @@ def collect_blog_for_date(
 
     result = {
         "date":    date_str,
-        "ticker":  ticker,
+        "name":    name,
         "channel": "blog_web",
         "total":   len(all_items),
         "items":   all_items,
@@ -227,7 +228,7 @@ def collect_blog_for_date(
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
-    logger.info(f"[WEB] {ticker}/{date_str} 저장 완료: {len(all_items)}건")
+    logger.info(f"[WEB] {name}/{date_str} 저장 완료: {len(all_items)}건")
     return all_items
 
 

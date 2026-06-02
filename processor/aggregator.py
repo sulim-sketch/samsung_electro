@@ -17,9 +17,9 @@ from processor.filter import filter_recommendations
 logger = setup_logging("pipeline.processor.aggregator")
 
 
-def load_raw(date_str: str, channel: str, ticker: str = config.DEFAULT_TICKER) -> list[dict]:
-    """raw JSON 파일 로드 (ticker 하위 디렉토리 기준)"""
-    path = config.RAW_DIR / channel / ticker / f"{date_str}.json"
+def load_raw(date_str: str, channel: str, name: str = config.DEFAULT_NAME) -> list[dict]:
+    """raw JSON 파일 로드 (종목명 하위 디렉토리 기준)"""
+    path = config.RAW_DIR / channel / name / f"{date_str}.json"
     if not path.exists():
         logger.debug(f"raw 파일 없음: {path}")
         return []
@@ -29,11 +29,11 @@ def load_raw(date_str: str, channel: str, ticker: str = config.DEFAULT_TICKER) -
 
 def aggregate_date(
     target_date: date,
-    ticker: str = config.DEFAULT_TICKER,
+    name: str = config.DEFAULT_NAME,
 ) -> dict | None:
     """특정 날짜의 블로그 raw 데이터를 집계하여 딕셔너리 반환"""
     date_str = target_date.strftime("%Y%m%d")
-    blog_raw = load_raw(date_str, "blog", ticker)
+    blog_raw = load_raw(date_str, "blog", name)
 
     if not blog_raw:
         return None
@@ -59,11 +59,11 @@ def aggregate_date(
 
 def build_and_save_summary(
     date_list: list[date] | None = None,
-    ticker: str = config.DEFAULT_TICKER,
+    name: str = config.DEFAULT_NAME,
 ) -> pd.DataFrame:
-    """일별 집계 수행 후 daily_summary_{ticker}.csv 저장"""
+    """일별 집계 수행 후 daily_summary_{name}.csv 저장"""
     if date_list is None:
-        blog_dir   = config.RAW_DIR / "blog" / ticker
+        blog_dir   = config.RAW_DIR / "blog" / name
         blog_stems = {p.stem for p in blog_dir.glob("*.json")} if blog_dir.exists() else set()
         date_list  = []
         for ds in sorted(blog_stems):
@@ -74,7 +74,7 @@ def build_and_save_summary(
 
     rows: list[dict] = []
     for d in sorted(date_list):
-        row = aggregate_date(d, ticker)
+        row = aggregate_date(d, name)
         if row is not None:
             rows.append(row)
             logger.debug(f"집계: {d} → 블로그 {row['blog_count']}건")
@@ -85,7 +85,7 @@ def build_and_save_summary(
 
     df = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
     config.PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = config.PROCESSED_DIR / f"daily_summary_{ticker}.csv"
+    out_path = config.PROCESSED_DIR / f"daily_summary_{name}.csv"
     df.to_csv(out_path, index=False, encoding="utf-8-sig")
     logger.info(f"일별 집계 저장: {out_path} | {len(df)}일치")
     return df

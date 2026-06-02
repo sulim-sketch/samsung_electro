@@ -1,4 +1,5 @@
 # config.py — 키워드, 날짜 범위, API 설정 등 전역 상수 관리
+import json
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -14,41 +15,39 @@ TODAY = date.today()
 START_DATE = TODAY.replace(year=TODAY.year - 2)
 
 # ── 종목 설정 ─────────────────────────────────────────────────────────────────
-DEFAULT_TICKER = "009150"
+DEFAULT_NAME = "삼성전기"
 
-STOCKS: dict = {
-    "009150": {
-        "name":          "삼성전기",
-        "title_keyword": "삼성전기",       # title에 반드시 포함되어야 하는 단어
-        "yahoo_ticker":  "009150.KS",
-        "keywords": [                       # 네이버 검색 키워드
-            "삼성전기 추천",
-            "삼성전기 매수",
-            "삼성전기 목표주가",
-            "삼성전기 강추",
-            "삼성전기 Buy",
-            "삼성전기 상향",
-        ],
-    },
-    # 새 종목 추가 예시:
-    # "005930": {
-    #     "name":          "삼성전자",
-    #     "title_keyword": "삼성전자",
-    #     "yahoo_ticker":  "005930.KS",
-    #     "keywords": ["삼성전자 추천", "삼성전자 매수", ...],
-    # },
-}
+# 추천 의도 suffix — 종목명 뒤에 붙여 검색 키워드를 자동 생성
+RECOMMEND_SUFFIXES = ["추천", "매수", "목표주가", "강추", "Buy", "상향"]
 
-def get_keywords(ticker: str = DEFAULT_TICKER) -> list[str]:
-    """종목 코드에 해당하는 검색 키워드 반환"""
-    return STOCKS[ticker]["keywords"]
-
-def get_title_keyword(ticker: str = DEFAULT_TICKER) -> str:
-    """종목 코드에 해당하는 title 필터 단어 반환"""
-    return STOCKS[ticker]["title_keyword"]
+def generate_keywords(stock_name: str) -> list[str]:
+    """종목명으로 검색 키워드 자동 생성"""
+    return [f"{stock_name} {suffix}" for suffix in RECOMMEND_SUFFIXES]
 
 # 하위 호환성 유지
-ALL_KEYWORDS = get_keywords(DEFAULT_TICKER)
+ALL_KEYWORDS = generate_keywords(DEFAULT_NAME)
+
+# ── 종목 메타 (종목명 ↔ Yahoo 티커 매핑) ──────────────────────────────────────
+STOCKS_META_PATH = PROCESSED_DIR / "stocks_meta.json"
+
+def load_stocks_meta() -> dict:
+    """stocks_meta.json 로드 (없으면 빈 dict 반환)"""
+    if STOCKS_META_PATH.exists():
+        return json.loads(STOCKS_META_PATH.read_text(encoding="utf-8"))
+    return {}
+
+def save_stock_meta(name: str, yahoo_ticker: str) -> None:
+    """종목 메타 저장 — 기존 항목 유지하며 추가/갱신 (병렬 실행 시 동일 데이터 중복 저장은 안전)"""
+    STOCKS_META_PATH.parent.mkdir(parents=True, exist_ok=True)
+    meta = load_stocks_meta()
+    meta[name] = {"yahoo_ticker": yahoo_ticker}
+    STOCKS_META_PATH.write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+def get_yahoo_ticker(name: str) -> str | None:
+    """종목명으로 Yahoo Finance 티커 조회"""
+    return load_stocks_meta().get(name, {}).get("yahoo_ticker")
 
 # ── 필터링: title 제외 키워드 ─────────────────────────────────────────────────
 # title에 이 키워드가 하나라도 있으면 비추천 글로 분류하여 카운트에서 제외
