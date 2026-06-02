@@ -12,9 +12,11 @@ from plotly.subplots import make_subplots
 
 # ── 설정 ─────────────────────────────────────────────────────────
 ROOT            = Path(__file__).parent
-BLOG_COUNTS_CSV = ROOT / "data" / "processed" / "blog_counts.csv"
-DATE_START      = date(2024, 6, 1)
-DATE_END        = date(2026, 5, 31)
+DATE_START = date(2024, 6, 1)
+DATE_END   = date(2026, 5, 31)
+
+def blog_counts_csv(ticker: str) -> Path:
+    return ROOT / "data" / "processed" / f"blog_counts_{ticker}.csv"
 
 st.set_page_config(
     page_title="삼성전기 대시보드",
@@ -25,12 +27,14 @@ st.set_page_config(
 # ── 데이터 로드 (캐시) ────────────────────────────────────────────
 
 @st.cache_data
-def load_blog_counts() -> pd.Series:
-    df       = pd.read_csv(BLOG_COUNTS_CSV, parse_dates=["date"])
+def load_blog_counts(ticker: str) -> pd.Series:
+    csv = blog_counts_csv(ticker)
+    if not csv.exists():
+        return pd.Series(0, index=pd.date_range(str(DATE_START), str(DATE_END), freq="D"), dtype=int)
+    df       = pd.read_csv(csv, parse_dates=["date"])
     series   = df.set_index("date")["count"]
     full_idx = pd.date_range(str(DATE_START), str(DATE_END), freq="D")
-    series   = series.reindex(full_idx, fill_value=0)
-    return series
+    return series.reindex(full_idx, fill_value=0)
 
 
 @st.cache_data
@@ -46,6 +50,12 @@ def load_price() -> pd.Series:
 # ── 사이드바: 날짜 범위 선택 ─────────────────────────────────────
 
 with st.sidebar:
+    st.header("📊 종목 선택")
+    # config.STOCKS에 등록된 종목만 표시
+    STOCK_OPTIONS = {f"[{t}] {info['name']}": t for t, info in {"009150": {"name": "삼성전기"}}.items()}
+    sel_stock_label = st.selectbox("종목", options=list(STOCK_OPTIONS.keys()))
+    sel_ticker = STOCK_OPTIONS[sel_stock_label]
+    st.divider()
     st.header("📅 기간 설정")
     sel_start, sel_end = st.slider(
         "조회 기간",
@@ -68,7 +78,7 @@ with st.sidebar:
 # ── 데이터 로드 & 필터링 ─────────────────────────────────────────
 
 with st.spinner("데이터 로딩 중..."):
-    blog_all  = load_blog_counts()
+    blog_all  = load_blog_counts(sel_ticker)
     price_all = load_price()
 
 s = pd.Timestamp(sel_start)

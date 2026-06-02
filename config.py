@@ -13,25 +13,42 @@ LOGS_DIR = BASE_DIR / "logs"
 TODAY = date.today()
 START_DATE = TODAY.replace(year=TODAY.year - 2)
 
-# ── 검색 키워드 ────────────────────────────────────────────────────────────────
-# 기본 종목 식별 키워드
-PRIMARY_KEYWORDS = [
-    "삼성전기",
-    "삼성전기 009150",
-]
+# ── 종목 설정 ─────────────────────────────────────────────────────────────────
+DEFAULT_TICKER = "009150"
 
-# 추천 의도가 포함된 키워드
-RECOMMEND_KEYWORDS = [
-    "삼성전기 추천",
-    "삼성전기 매수",
-    "삼성전기 목표주가",
-    "삼성전기 강추",
-    "삼성전기 Buy",
-    "삼성전기 상향",
-]
+STOCKS: dict = {
+    "009150": {
+        "name":          "삼성전기",
+        "title_keyword": "삼성전기",       # title에 반드시 포함되어야 하는 단어
+        "yahoo_ticker":  "009150.KS",
+        "keywords": [                       # 네이버 검색 키워드
+            "삼성전기 추천",
+            "삼성전기 매수",
+            "삼성전기 목표주가",
+            "삼성전기 강추",
+            "삼성전기 Buy",
+            "삼성전기 상향",
+        ],
+    },
+    # 새 종목 추가 예시:
+    # "005930": {
+    #     "name":          "삼성전자",
+    #     "title_keyword": "삼성전자",
+    #     "yahoo_ticker":  "005930.KS",
+    #     "keywords": ["삼성전자 추천", "삼성전자 매수", ...],
+    # },
+}
 
-# 전체 키워드 (수집 시 순서대로 사용)
-ALL_KEYWORDS = RECOMMEND_KEYWORDS
+def get_keywords(ticker: str = DEFAULT_TICKER) -> list[str]:
+    """종목 코드에 해당하는 검색 키워드 반환"""
+    return STOCKS[ticker]["keywords"]
+
+def get_title_keyword(ticker: str = DEFAULT_TICKER) -> str:
+    """종목 코드에 해당하는 title 필터 단어 반환"""
+    return STOCKS[ticker]["title_keyword"]
+
+# 하위 호환성 유지
+ALL_KEYWORDS = get_keywords(DEFAULT_TICKER)
 
 # ── 필터링: title 제외 키워드 ─────────────────────────────────────────────────
 # title에 이 키워드가 하나라도 있으면 비추천 글로 분류하여 카운트에서 제외
