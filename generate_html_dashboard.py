@@ -77,9 +77,13 @@ html = f"""<!DOCTYPE html>
   select{{border:1px solid #ddd;border-radius:6px;padding:6px 10px;font-size:13px;
           outline:none;cursor:pointer;background:#fff}}
   select:focus{{border-color:#1f77b4}}
-  input[type=date]{{border:1px solid #ddd;border-radius:6px;padding:6px 10px;font-size:13px;outline:none;cursor:pointer}}
-  input[type=date]:focus{{border-color:#1f77b4}}
   .sep{{width:1px;height:30px;background:#e0e0e0}}
+  .date-range-ctrl{{display:flex;flex-direction:column;gap:6px}}
+  .date-display{{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#333}}
+  .date-display span.arrow{{color:#aaa;font-weight:400}}
+  .slider-row{{display:flex;align-items:center;gap:8px}}
+  .slider-row .slbl{{font-size:12px;color:#888;width:28px}}
+  input[type=range]{{width:260px;accent-color:#1f77b4;cursor:pointer;height:4px}}
   .radios{{display:flex;gap:6px}}
   .radios label{{display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 14px;
                  border-radius:6px;font-size:13px;border:1px solid #ddd;background:#fafafa;transition:all .15s}}
@@ -112,10 +116,21 @@ html = f"""<!DOCTYPE html>
       </select>
     </div>
     <div class="sep"></div>
-    <div class="ctrl"><label>시작일</label>
-      <input type="date" id="ds" value="2024-06-01" min="2024-06-01" max="2026-05-31"></div>
-    <div class="ctrl"><label>종료일</label>
-      <input type="date" id="de" value="2026-05-31" min="2024-06-01" max="2026-05-31"></div>
+    <div class="date-range-ctrl">
+      <div class="date-display">
+        <span id="startLabel">2024-06-01</span>
+        <span class="arrow">→</span>
+        <span id="endLabel">2026-05-31</span>
+      </div>
+      <div class="slider-row">
+        <span class="slbl">시작</span>
+        <input type="range" id="startSlider" min="0" value="0" step="1">
+      </div>
+      <div class="slider-row">
+        <span class="slbl">종료</span>
+        <input type="range" id="endSlider" value="0" step="1">
+      </div>
+    </div>
     <div class="sep"></div>
     <div class="ctrl">
       <span class="src-title">📡 데이터 소스</span>
@@ -146,17 +161,31 @@ html = f"""<!DOCTYPE html>
 <script>
 var D = {data_json};
 var CFG = {{displayModeBar:false,responsive:true}};
+var MAX_IDX = D.dates.length - 1;
 
-function getStock(){{ return document.getElementById('stockSel').value; }}
+// 슬라이더 초기화
+(function(){{
+  var ss=document.getElementById('startSlider');
+  var es=document.getElementById('endSlider');
+  ss.max = MAX_IDX; ss.value = 0;
+  es.max = MAX_IDX; es.value = MAX_IDX;
+  document.getElementById('startLabel').textContent = D.dates[0];
+  document.getElementById('endLabel').textContent   = D.dates[MAX_IDX];
+}})();
 
-function slice(start,end){{
-  var si=D.dates.indexOf(start), ei=D.dates.indexOf(end);
-  if(si<0)si=0; if(ei<0)ei=D.dates.length-1;
+function getStartIdx(){{ return parseInt(document.getElementById('startSlider').value); }}
+function getEndIdx(){{   return parseInt(document.getElementById('endSlider').value); }}
+function getStock(){{    return document.getElementById('stockSel').value; }}
+
+function slice(){{
+  var si=getStartIdx(), ei=getEndIdx();
   var s=D.stocks[getStock()];
   return{{
     dates:  D.dates.slice(si,ei+1),
     prices: s.prices.slice(si,ei+1),
-    counts: s.counts.slice(si,ei+1)
+    counts: s.counts.slice(si,ei+1),
+    startDate: D.dates[si],
+    endDate:   D.dates[ei]
   }};
 }}
 
@@ -196,7 +225,7 @@ function updateMetrics(d){{
 
 function draw(d,mode,start,end){{
   var xe=pad(start,end);
-  var xax={{showgrid:true,gridcolor:'#e5e5e5',fixedrange:true,tickformat:'%Y-%m',dtick:'M1',range:[start,xe]}};
+  var xax={{showgrid:true,gridcolor:'#e5e5e5',fixedrange:true,tickformat:'%Y-%m',hoverformat:'%Y-%m-%d',dtick:'M1',range:[start,xe]}};
   var avg=d.counts.reduce(function(a,b){{return a+b;}},0)/d.dates.length;
   var name=getStock();
 
@@ -255,17 +284,27 @@ function draw(d,mode,start,end){{
   }}
 }}
 
+function onStartSlider(){{
+  var sv=getStartIdx(), ev=getEndIdx();
+  if(sv>=ev){{ document.getElementById('startSlider').value=ev-1; sv=ev-1; }}
+  document.getElementById('startLabel').textContent=D.dates[sv];
+  update();
+}}
+function onEndSlider(){{
+  var sv=getStartIdx(), ev=getEndIdx();
+  if(ev<=sv){{ document.getElementById('endSlider').value=sv+1; ev=sv+1; }}
+  document.getElementById('endLabel').textContent=D.dates[ev];
+  update();
+}}
+
 function update(){{
-  var start=document.getElementById('ds').value;
-  var end=document.getElementById('de').value;
-  if(start>end)return;
-  var mode=document.querySelector('input[name=mode]:checked').value;
-  var d=slice(start,end);
+  var d=slice();
   d.counts=getActiveCounts(d);
-  document.getElementById('cap').textContent='수정주가 & 네이버 블로그 추천 언급 빈도 | '+start+' ~ '+end;
+  var mode=document.querySelector('input[name=mode]:checked').value;
+  document.getElementById('cap').textContent='수정주가 & 네이버 블로그 추천 언급 빈도 | '+d.startDate+' ~ '+d.endDate;
   updateHeader();
   updateMetrics(d);
-  draw(d,mode,start,end);
+  draw(d,mode,d.startDate,d.endDate);
   document.querySelectorAll('.radios label').forEach(function(l){{
     l.classList.toggle('active',l.querySelector('input').checked);
   }});
@@ -275,8 +314,8 @@ function update(){{
 }}
 
 document.getElementById('stockSel').addEventListener('change',update);
-document.getElementById('ds').addEventListener('change',update);
-document.getElementById('de').addEventListener('change',update);
+document.getElementById('startSlider').addEventListener('input',onStartSlider);
+document.getElementById('endSlider').addEventListener('input',onEndSlider);
 document.querySelectorAll('input[name=mode]').forEach(function(r){{r.addEventListener('change',update);}});
 document.querySelectorAll('input[name=src]').forEach(function(r){{r.addEventListener('change',update);}});
 update();

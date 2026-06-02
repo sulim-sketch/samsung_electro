@@ -6,7 +6,8 @@ from pathlib import Path
 # ── 디렉토리 경로 ──────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
-RAW_DIR = DATA_DIR / "raw"
+RAW_DIR      = DATA_DIR / "raw"
+FILTERED_DIR = DATA_DIR / "filtered"   # 필터링 통과 게시물 JSON
 PROCESSED_DIR = DATA_DIR / "processed"
 LOGS_DIR = BASE_DIR / "logs"
 
